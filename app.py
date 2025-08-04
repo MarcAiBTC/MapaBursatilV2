@@ -640,7 +640,7 @@ def main():
     st.markdown("""
     <div style='text-align: center; padding: 20px; background: #f8f9fa; border-radius: 10px;'>
         🚀 <b>Mapa Financiero Mundial v5.0</b><br>
-        📊 Datos reales y simulados de mercados globales<br>
+        📊 Datos reales de mercados globales<br>
         💡 Herramienta educativa para inversores<br>
         ⚠️ Solo fines informativos - No es asesoramiento financiero
     </div>
