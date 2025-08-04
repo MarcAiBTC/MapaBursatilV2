@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Configuración ampliada de mercados con datos reales
+# Configuración completa de mercados con datos reales
 MARKETS_CONFIG = {
     # América del Norte
     '^GSPC': {
@@ -420,7 +420,7 @@ def get_color_by_change(change_pct):
         return "#FF1744"
 
 def create_world_map_visual(market_data):
-    """Mapa mundial visual"""
+    """Mapa mundial visual con emoticonos por país"""
     st.markdown("### 🗺️ Mapa Mundial de Mercados Financieros")
     
     map_layout = """
@@ -618,7 +618,6 @@ def create_market_cards(market_data):
             continue
         
         if region_name == "🌍 Europa":
-            # Primera fila: 2 mercados
             first_row = region_markets[:2]
             if first_row:
                 first_cols = st.columns(len(first_row))
@@ -626,7 +625,6 @@ def create_market_cards(market_data):
                     with first_cols[j]:
                         create_market_card(symbol, config, market_data[symbol])
             
-            # Segunda fila: 2 mercados restantes
             second_row = region_markets[2:4]
             if second_row:
                 second_cols = st.columns(len(second_row))
@@ -635,7 +633,6 @@ def create_market_cards(market_data):
                         create_market_card(symbol, config, market_data[symbol])
         
         elif region_name == "🌅 Asia-Pacífico":
-            # Primera fila: 3 mercados
             first_row = region_markets[:3]
             if first_row:
                 first_cols = st.columns(len(first_row))
@@ -643,7 +640,6 @@ def create_market_cards(market_data):
                     with first_cols[j]:
                         create_market_card(symbol, config, market_data[symbol])
             
-            # Segunda fila: 2 mercados restantes
             second_row = region_markets[3:5]
             if second_row:
                 second_cols = st.columns(len(second_row))
@@ -688,9 +684,13 @@ def create_market_card(symbol, config, data):
         st.markdown("**📍 Información del Mercado:**")
         
         info_cols = st.columns(2)
+        with info_cols[0]:
+            st.write(f"• **País**: {config['country']}")
+            st.write(f"• **Moneda**: {config['currency']}")
+            st.write(f"• **Estado**: {status_emoji} {market_status['status']}")
+        
         with info_cols[1]:
             st.write(f"• **Hora local**: {market_status['local_time']}")
-            st.write(f"• **Frankfurt**: {market_status['frankfurt_time']}")
             st.write(f"• **Fuente**: {data['source']}")
         
         st.markdown("**🕐 Horarios y Estado:**")
@@ -699,7 +699,7 @@ def create_market_card(symbol, config, data):
         st.caption(f"🔄 Actualizado: {data['last_update']} | Ref. Frankfurt: {market_status['reference_note']}")
 
 def create_detailed_table(market_data):
-    """Tabla detallada con todos los datos"""
+    """Tabla detallada con todos los datos y hora de Frankfurt como referencia"""
     table_data = []
     
     for symbol, data in market_data.items():
@@ -739,7 +739,7 @@ def main():
     current_utc = datetime.now(pytz.UTC)
     st.info(f"🕐 **Hora UTC actual**: {current_utc.strftime('%Y-%m-%d %H:%M:%S')} | ⚡ **Actualización automática cada 2 minutos**")
     
-    # Sidebar
+    # Sidebar con información actualizada
     with st.sidebar:
         st.header("📊 Panel de Control")
         
@@ -753,6 +753,7 @@ def main():
         
         st.markdown("---")
         
+        # Hora de Frankfurt como referencia principal
         frankfurt_tz = pytz.timezone('Europe/Berlin')
         frankfurt_time = datetime.now(frankfurt_tz)
         
@@ -761,6 +762,7 @@ def main():
         
         st.markdown("---")
         
+        # Horarios mundiales comparados con Frankfurt
         st.subheader("🌍 Comparación Horaria")
         
         key_timezones = [
@@ -784,6 +786,7 @@ def main():
         
         st.markdown("---")
         
+        # Controles mejorados
         control_cols = st.columns(2)
         with control_cols[0]:
             if st.button("🔄 Actualizar", type="primary"):
@@ -795,16 +798,20 @@ def main():
                 st.cache_data.clear()
                 st.success("✅ Cache limpiado")
         
+        # Información del sistema
         st.markdown("---")
         st.markdown("**🔧 Sistema:**")
         st.markdown(f"""
         - **Mercados**: {len(MARKETS_CONFIG)}
         - **Cache**: 2 minutos
         - **Referencia**: Frankfurt
-        - **APIs**: Yahoo Finance + Finnhub
+        - **APIs**: Yahoo Finance + Fallback
         """)
+        
+        # Estadísticas en tiempo real (se calculará cuando market_data esté disponible)
+        st.markdown("- **Datos reales**: Calculando...")
     
-    # Obtener datos
+    # Obtener datos con spinner
     with st.spinner("📡 Conectando con mercados mundiales..."):
         market_data = get_all_market_data()
     
@@ -812,89 +819,135 @@ def main():
         st.error("❌ Error conectando con mercados. Intenta actualizar.")
         return
     
+    # Actualizar estadística en sidebar
+    real_data_count = sum(1 for data in market_data.values() if data and data.get('is_real', False))
+    with st.sidebar:
+        st.markdown(f"- **Datos reales**: {real_data_count} activos")
+    
     # Métricas de resumen
     st.markdown("### 📊 Resumen Global de Mercados")
     create_summary_metrics(market_data)
     
     st.markdown("---")
     
-    # Mapa mundial visual
+    # NUEVO: Mapa mundial visual
     create_world_map_visual(market_data)
     
     st.markdown("---")
     
-    # Tarjetas de mercados
+    # Tarjetas de mercados con disposición mejorada
     create_market_cards(market_data)
     
     # Tabla detallada
     st.markdown("### 📋 Análisis Detallado de Todos los Mercados")
     create_detailed_table(market_data)
     
-    # Información adicional
-    with st.expander("ℹ️ Información Técnica"):
+    # Información adicional expandible
+    with st.expander("ℹ️ Información Técnica Completa"):
         real_data_count = sum(1 for data in market_data.values() if data.get('is_real', False))
         total_count = len(market_data)
         
         st.markdown(f"""
-        **📊 Estadísticas de Datos:**
-        - Total de mercados: {total_count}
+        **📊 Estadísticas de Datos en Tiempo Real:**
+        - Total de mercados monitoreados: {total_count}
         - Datos reales obtenidos: {real_data_count}
-        - Datos simulados: {total_count - real_data_count}
-        - Tasa de éxito: {(real_data_count/total_count*100) if total_count > 0 else 0:.1f}%
-        - Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        - Datos simulados (fallback): {total_count - real_data_count}
+        - Tasa de éxito en obtención real: {(real_data_count/total_count*100) if total_count > 0 else 0:.1f}%
+        - Última actualización completa: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
-        **🔗 Fuentes de Datos:**
+        **🔗 Fuentes de Datos Utilizadas:**
         1. **Yahoo Finance API** (principal) - Datos oficiales en tiempo real
-        2. **Datos realistas simulados** - Fallback basado en patrones reales
+        2. **Datos realistas simulados** - Fallback inteligente basado en patrones reales de mercado
         
-        **🏛️ Mercados Incluidos:**
-        - **Estados Unidos**: S&P 500, NASDAQ
-        - **Canadá**: TSX Toronto
-        - **Reino Unido**: FTSE 100 Londres
-        - **Alemania**: DAX Frankfurt
-        - **Francia**: CAC 40 París
-        - **España**: IBEX 35 Madrid
-        - **Japón**: Nikkei 225 Tokio
-        - **China**: Shanghai Composite, Shenzhen Component
-        - **Hong Kong**: Hang Seng
-        - **Australia**: ASX 200 Sídney
-        - **Brasil**: Bovespa São Paulo
+        **🏛️ Mercados Financieros Incluidos:**
+        - **🇺🇸 Estados Unidos**: S&P 500 (NYSE), NASDAQ
+        - **🇨🇦 Canadá**: TSX Toronto
+        - **🇬🇧 Reino Unido**: FTSE 100 Londres
+        - **🇩🇪 Alemania**: DAX Frankfurt
+        - **🇫🇷 Francia**: CAC 40 París
+        - **🇪🇸 España**: IBEX 35 Madrid
+        - **🇯🇵 Japón**: Nikkei 225 Tokio
+        - **🇨🇳 China**: Shanghai Composite, Shenzhen Component
+        - **🇭🇰 Hong Kong**: Hang Seng
+        - **🇦🇺 Australia**: ASX 200 Sídney
+        - **🇧🇷 Brasil**: Bovespa São Paulo
         
-        **⚙️ Características Técnicas:**
-        - Cache inteligente de 2 minutos
-        - Manejo robusto de errores
-        - Múltiples APIs como respaldo
-        - Cálculo preciso de zonas horarias
-        - Estados de mercado en tiempo real
-        - Interfaz completamente responsive
+        **⚙️ Características Técnicas Avanzadas:**
+        - Cache inteligente de 2 minutos para optimizar rendimiento
+        - Manejo robusto de errores con múltiples niveles de fallback
+        - Cálculo de Media Móvil 200 períodos (MA200) en tiempo real
+        - Sistema de emoticonos diferenciados para tendencias alcistas/bajistas
+        - Cálculo preciso de zonas horarias mundiales
+        - Estados de mercado en tiempo real (abierto/cerrado)
+        - Hora de Frankfurt como referencia global unificada
+        - Interfaz completamente responsive para móviles y desktop
+        - Disposición optimizada para regiones con múltiples mercados
+        - Volumen de trading con formato inteligente (K/M/B)
+        
+        **🎨 Funcionalidades de Interfaz:**
+        - Mapa mundial visual con emoticonos por país
+        - Tarjetas expandibles para cada mercado individual
+        - Tabla detallada sorteable por rendimiento
+        - Sidebar con horarios mundiales en tiempo real
+        - Sistema de colores dinámico según rendimiento
+        - Animaciones hover en elementos interactivos
+        - Badges informativos de calidad de datos (REAL/SIM)
+        
+        **📈 Métricas y Análisis:**
+        - Clasificación por intensidad de movimiento (☀️🌤️☁️🌩️)
+        - Cálculo de sentimiento global de mercados
+        - Contador de mercados abiertos en tiempo real
+        - Promedio global ponderado de cambios
+        - Estadísticas de éxito de obtención de datos
+        - Trending analysis basado en MA200
         """)
     
-    # Footer profesional
+    # Footer profesional y completo
     st.markdown("---")
     total_markets = len(MARKETS_CONFIG)
     current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     st.markdown(f"""
-    <div style='text-align: center; padding: 20px; background-color: #f0f2f6; border-radius: 10px; margin: 20px 0;'>
-        <h4>🚀 Mapa Financiero Mundial v7.0 - Datos Reales</h4>
-        <p><strong>📊 {total_markets} mercados globales monitoreados</strong></p>
-        <p>📡 <em>Datos en tiempo real de Yahoo Finance</em></p>
-        <p>🌍 <em>Horarios precisos con zona horaria de Frankfurt como referencia</em></p>
-        <p style='font-size: 12px; color: #666; margin-top: 15px;'>
-            ⚠️ <strong>Aviso:</strong> Esta herramienta es solo para fines educativos e informativos. 
-            No constituye asesoramiento financiero. Las decisiones de inversión deben basarse en análisis profesional.
+    <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px; margin: 20px 0;'>
+        <h3 style="margin-bottom: 15px;">🚀 Mapa Financiero Mundial v8.0 - Datos Reales</h3>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📊 {total_markets} mercados globales monitoreados en tiempo real</strong></p>
+        <p style="margin: 5px 0;">📡 <em>Datos en tiempo real de Yahoo Finance con fallback inteligente</em></p>
+        <p style="margin: 5px 0;">🌍 <em>Horarios precisos con zona horaria de Frankfurt como referencia global</em></p>
+        <p style="margin: 5px 0;">📈 <em>Media Móvil 200 períodos calculada en tiempo real</em></p>
+        <p style="margin: 5px 0;">🗺️ <em>Mapa mundial interactivo con emoticonos por país</em></p>
+        
+        <div style="margin: 20px 0;">
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                📡 TIEMPO REAL
+            </span>
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                🕐 HORARIOS PRECISOS
+            </span>
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                💰 PRECIOS REALES
+            </span>
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                📈 MA200 REAL
+            </span>
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                🌍 MAPA INTERACTIVO
+            </span>
+        </div>
+        
+        <p style='font-size: 12px; margin-top: 20px; opacity: 0.8;'>
+            ⚠️ <strong>Aviso Legal:</strong> Esta herramienta es exclusivamente para fines educativos e informativos. 
+            No constituye asesoramiento financiero, de inversión o comercial. Las decisiones de inversión deben 
+            basarse en análisis profesional independiente y consideración cuidadosa de los riesgos individuales.
         </p>
-        <p style='font-size: 11px; color: #888; margin-top: 10px;'>
-            Última actualización de la aplicación: {current_timestamp}
+        <p style='font-size: 10px; margin-top: 10px; opacity: 0.7;'>
+            Última actualización del sistema: {current_timestamp} | Datos actualizados cada 2 minutos
+        </p>
+        <p style='font-size: 10px; margin-top: 5px; opacity: 0.6;'>
+            Desarrollado con Streamlit • Datos de Yahoo Finance • Diseño responsive
         </p>
     </div>
     """, unsafe_allow_html=True)
 
 # Ejecutar aplicación principal
 if __name__ == "__main__":
-    main()[0]:
-            st.write(f"• **País**: {config['country']}")
-            st.write(f"• **Moneda**: {config['currency']}")
-            st.write(f"• **Estado**: {status_emoji} {market_status['status']}")
-        
-        with info_cols
+    main()
