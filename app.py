@@ -782,7 +782,7 @@ def create_market_card(symbol, config, data):
         st.markdown("**🕐 Horarios y Estado:**")
         st.info(f"📅 {market_status['next_action']}")
         
-        # Timestamp de actualización
+        # Timestamp de actualización (CORREGIDO)
         st.caption(f"🔄 Actualizado: {data['last_update']} | Ref. Frankfurt: {market_status['reference_note']}")
                             
                             # Métricas principales en columnas
