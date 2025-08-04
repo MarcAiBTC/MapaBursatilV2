@@ -6,19 +6,17 @@
 # ====================================================================
 
 # 1. INSTALACIÓN DE LIBRERÍAS REQUERIDAS
-# pip install streamlit pandas requests yfinance pytz plotly
+# Solo usa librerías estándar de Streamlit Cloud - NO requiere instalación adicional
 
 # 2. IMPORTACIÓN DE LIBRERÍAS
 import streamlit as st
 import pandas as pd
 import requests
-import yfinance as yf
 from datetime import datetime, timedelta
 import pytz
 import json
 import time
-import plotly.express as px
-import plotly.graph_objects as go
+import random
 from typing import Dict, List, Tuple, Optional
 import logging
 
@@ -49,7 +47,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 16,
         "currency": "USD",
-        "description": "Índice de las 500 empresas más importantes de EE.UU."
+        "description": "Índice de las 500 empresas más importantes de EE.UU.",
+        "base_price": 5800
     },
     "^IXIC": {
         "name": "NASDAQ",
@@ -60,7 +59,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 16,
         "currency": "USD",
-        "description": "Índice tecnológico principal de EE.UU."
+        "description": "Índice tecnológico principal de EE.UU.",
+        "base_price": 19500
     },
     "^GSPTSE": {
         "name": "TSX",
@@ -71,7 +71,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 16,
         "currency": "CAD",
-        "description": "Índice principal de la bolsa de Toronto"
+        "description": "Índice principal de la bolsa de Toronto",
+        "base_price": 25200
     },
     
     # EUROPA
@@ -84,7 +85,8 @@ GLOBAL_MARKETS = {
         "market_open": 8,
         "market_close": 16,
         "currency": "GBP",
-        "description": "100 empresas más grandes del Reino Unido"
+        "description": "100 empresas más grandes del Reino Unido",
+        "base_price": 8300
     },
     "^GDAXI": {
         "name": "DAX",
@@ -95,7 +97,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 17,
         "currency": "EUR",
-        "description": "Índice de las 40 empresas principales de Alemania"
+        "description": "Índice de las 40 empresas principales de Alemania",
+        "base_price": 21400
     },
     "^FCHI": {
         "name": "CAC 40",
@@ -106,7 +109,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 17,
         "currency": "EUR",
-        "description": "40 empresas más importantes de Francia"
+        "description": "40 empresas más importantes de Francia",
+        "base_price": 7520
     },
     "^IBEX": {
         "name": "IBEX 35",
@@ -117,7 +121,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 17,
         "currency": "EUR",
-        "description": "35 empresas principales de España"
+        "description": "35 empresas principales de España",
+        "base_price": 12150
     },
     
     # ASIA-PACÍFICO
@@ -130,7 +135,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 15,
         "currency": "JPY", 
-        "description": "225 empresas principales de Japón"
+        "description": "225 empresas principales de Japón",
+        "base_price": 39700
     },
     "000001.SS": {
         "name": "Shanghai Composite",
@@ -141,7 +147,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 15,
         "currency": "CNY",
-        "description": "Índice compuesto de Shanghai"
+        "description": "Índice compuesto de Shanghai",
+        "base_price": 3320
     },
     "^HSI": {
         "name": "Hang Seng",
@@ -152,7 +159,8 @@ GLOBAL_MARKETS = {
         "market_open": 9,
         "market_close": 16,
         "currency": "HKD",
-        "description": "Índice principal de Hong Kong"
+        "description": "Índice principal de Hong Kong",
+        "base_price": 19750
     },
     "^AXJO": {
         "name": "ASX 200",
@@ -163,7 +171,8 @@ GLOBAL_MARKETS = {
         "market_open": 10,
         "market_close": 16,
         "currency": "AUD",
-        "description": "200 empresas principales de Australia"
+        "description": "200 empresas principales de Australia",
+        "base_price": 8420
     },
     
     # AMÉRICA LATINA
@@ -176,7 +185,8 @@ GLOBAL_MARKETS = {
         "market_open": 10,
         "market_close": 17,
         "currency": "BRL",
-        "description": "Índice principal de Brasil"
+        "description": "Índice principal de Brasil",
+        "base_price": 122800
     },
     "^MXX": {
         "name": "IPC",
@@ -187,7 +197,8 @@ GLOBAL_MARKETS = {
         "market_open": 8,
         "market_close": 15,
         "currency": "MXN",
-        "description": "Índice de Precios y Cotizaciones de México"
+        "description": "Índice de Precios y Cotizaciones de México",
+        "base_price": 55800
     }
 }
 
@@ -206,9 +217,9 @@ WEATHER_EMOJIS = {
 # ====================================================================
 
 @st.cache_data(ttl=300)  # Cache por 5 minutos
-def fetch_market_data(symbol: str) -> Optional[Dict]:
+def fetch_market_data_yahoo_api(symbol: str) -> Optional[Dict]:
     """
-    Obtiene datos en tiempo real del mercado usando yfinance
+    Intenta obtener datos reales de Yahoo Finance API
     
     Args:
         symbol: Símbolo del índice (ej: ^GSPC)
@@ -217,47 +228,156 @@ def fetch_market_data(symbol: str) -> Optional[Dict]:
         Diccionario con datos del mercado o None si hay error
     """
     try:
-        ticker = yf.Ticker(symbol)
+        # Intentar Yahoo Finance API pública
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
         
-        # Obtener datos históricos (últimos 60 días para calcular MA50)
-        hist = ticker.history(period="60d")
-        
-        if hist.empty:
-            logger.warning(f"No hay datos históricos para {symbol}")
-            return None
-            
-        # Obtener información actual del ticker
-        info = ticker.info
-        
-        # Precio actual y precio de cierre anterior
-        current_price = hist['Close'].iloc[-1]
-        previous_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
-        
-        # Calcular cambio porcentual
-        change_percent = ((current_price - previous_close) / previous_close) * 100
-        
-        # Calcular Media Móvil de 50 períodos
-        ma50 = hist['Close'].rolling(window=50).mean().iloc[-1] if len(hist) >= 50 else None
-        ma50_trend = "alcista" if ma50 and current_price > ma50 else "bajista"
-        
-        # Volumen promedio
-        avg_volume = hist['Volume'].tail(5).mean()
-        
-        return {
-            "symbol": symbol,
-            "current_price": round(current_price, 2),
-            "previous_close": round(previous_close, 2),
-            "change_percent": round(change_percent, 2),
-            "change_absolute": round(current_price - previous_close, 2),
-            "volume": int(avg_volume) if avg_volume > 0 else 0,
-            "ma50": round(ma50, 2) if ma50 else None,
-            "ma50_trend": ma50_trend,
-            "last_updated": datetime.now().strftime("%H:%M:%S")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                result = data['chart']['result'][0]
+                
+                if 'meta' in result:
+                    meta = result['meta']
+                    
+                    # Obtener precios
+                    current_price = meta.get('regularMarketPrice')
+                    previous_close = meta.get('previousClose')
+                    volume = meta.get('regularMarketVolume', 0)
+                    
+                    # Si no hay precio actual, usar datos históricos
+                    if not current_price and 'indicators' in result:
+                        quotes = result['indicators']['quote'][0]
+                        closes = quotes.get('close', [])
+                        valid_closes = [c for c in closes if c is not None]
+                        if valid_closes:
+                            current_price = valid_closes[-1]
+                            if len(valid_closes) > 1:
+                                previous_close = valid_closes[-2]
+                    
+                    if current_price and previous_close and previous_close > 0:
+                        change_percent = ((current_price - previous_close) / previous_close) * 100
+                        
+                        # Calcular MA50 si hay suficientes datos
+                        ma50 = None
+                        ma50_trend = "neutral"
+                        
+                        if 'indicators' in result and 'quote' in result['indicators']:
+                            quotes = result['indicators']['quote'][0]
+                            closes = quotes.get('close', [])
+                            valid_closes = [c for c in closes if c is not None]
+                            
+                            if len(valid_closes) >= 50:
+                                ma50 = sum(valid_closes[-50:]) / 50
+                                ma50_trend = "alcista" if current_price > ma50 else "bajista"
+                        
+                        return {
+                            "symbol": symbol,
+                            "current_price": round(float(current_price), 2),
+                            "previous_close": round(float(previous_close), 2),
+                            "change_percent": round(float(change_percent), 2),
+                            "change_absolute": round(float(current_price - previous_close), 2),
+                            "volume": int(volume) if volume else 0,
+                            "ma50": round(float(ma50), 2) if ma50 else None,
+                            "ma50_trend": ma50_trend,
+                            "last_updated": datetime.now().strftime("%H:%M:%S"),
+                            "data_source": "🟢 Yahoo Finance API"
+                        }
+        
     except Exception as e:
-        logger.error(f"Error obteniendo datos para {symbol}: {str(e)}")
+        logger.warning(f"Error con Yahoo API para {symbol}: {str(e)}")
+    
+    return None
+
+def generate_realistic_market_data(symbol: str, market_info: Dict) -> Dict:
+    """
+    Genera datos realistas basados en patrones reales de mercado
+    
+    Args:
+        symbol: Símbolo del mercado
+        market_info: Información del mercado
+        
+    Returns:
+        Diccionario con datos simulados realistas
+    """
+    base_price = market_info.get("base_price", 1000)
+    
+    # Obtener estado del mercado para influir en la volatilidad
+    market_status = get_market_status(
+        market_info["timezone"],
+        market_info["market_open"],
+        market_info["market_close"]
+    )
+    
+    # Ajustar volatilidad según si el mercado está abierto
+    if market_status["is_open"]:
+        # Mayor volatilidad cuando está abierto
+        volatility = random.uniform(0.005, 0.025)  # 0.5% - 2.5%
+    else:
+        # Menor volatilidad cuando está cerrado
+        volatility = random.uniform(0.001, 0.015)  # 0.1% - 1.5%
+    
+    # Sesgo ligeramente alcista (mercados tienden a subir a largo plazo)
+    bias = random.uniform(-0.003, 0.005)  # Sesgo hacia el alza
+    
+    # Calcular precio actual
+    price_change = (volatility + bias) * random.choice([-1, 1])
+    current_price = base_price * (1 + price_change)
+    previous_close = base_price * (1 + price_change - random.uniform(0.001, 0.01))
+    
+    # Calcular cambio porcentual
+    change_percent = ((current_price - previous_close) / previous_close) * 100
+    
+    # MA50 simulado (tendencia general)
+    ma50_bias = random.choice([1, 1, 1, -1])  # 75% probabilidad alcista
+    ma50 = current_price * (1 + (ma50_bias * random.uniform(0.01, 0.05)))
+    ma50_trend = "alcista" if current_price > ma50 else "bajista"
+    
+    # Volumen simulado proporcional al tamaño del mercado
+    volume_base = max(1000000, int(base_price * 1000))
+    volume = random.randint(int(volume_base * 0.5), int(volume_base * 2))
+    
+    return {
+        "symbol": symbol,
+        "current_price": round(current_price, 2),
+        "previous_close": round(previous_close, 2),
+        "change_percent": round(change_percent, 2),
+        "change_absolute": round(current_price - previous_close, 2),
+        "volume": volume,
+        "ma50": round(ma50, 2),
+        "ma50_trend": ma50_trend,
+        "last_updated": datetime.now().strftime("%H:%M:%S"),
+        "data_source": "🟡 Simulación Realista"
+    }
+
+def fetch_market_data(symbol: str) -> Optional[Dict]:
+    """
+    Obtiene datos del mercado, primero intenta fuentes reales, luego simula
+    
+    Args:
+        symbol: Símbolo del índice
+        
+    Returns:
+        Diccionario con datos del mercado
+    """
+    if symbol not in GLOBAL_MARKETS:
         return None
+        
+    market_info = GLOBAL_MARKETS[symbol]
+    
+    # Intentar obtener datos reales primero
+    real_data = fetch_market_data_yahoo_api(symbol)
+    if real_data:
+        return real_data
+    
+    # Si no se pueden obtener datos reales, generar datos realistas
+    return generate_realistic_market_data(symbol, market_info)
 
 def get_weather_emoji(change_percent: float) -> str:
     """
@@ -458,6 +578,8 @@ def create_market_card(market: Dict) -> None:
                 st.write(f"**📈 Cierre anterior:** {data['previous_close']:,.2f}")
                 st.write(f"**📊 MA50:** {data['ma50']:,.2f}" if data['ma50'] else "**📊 MA50:** N/A")
                 st.write(f"**🔄 Actualizado:** {data['last_updated']}")
+            
+            st.write(f"**📡 Fuente:** {data['data_source']}")
 
 def create_global_summary(market_data: Dict) -> None:
     """
@@ -491,6 +613,9 @@ def create_global_summary(market_data: Dict) -> None:
             )
             if status["is_open"]:
                 open_markets += 1
+    
+    # Contar fuentes de datos reales
+    real_data_sources = sum(1 for data in valid_data if "🟢" in data.get("data_source", ""))
     
     st.markdown("### 📊 Resumen Global de Mercados")
     
@@ -537,12 +662,12 @@ def create_global_summary(market_data: Dict) -> None:
         st.metric(
             label="🌡️ Sentimiento Global",
             value=sentiment,
-            delta=f"Basado en {total_markets} mercados"
+            delta=f"{real_data_sources} datos reales"
         )
 
 def create_performance_chart(market_data: Dict) -> None:
     """
-    Crea gráfico de rendimiento de todos los mercados
+    Crea gráfico de rendimiento usando matplotlib nativo de Streamlit
     
     Args:
         market_data: Diccionario con datos de todos los mercados
@@ -569,37 +694,26 @@ def create_performance_chart(market_data: Dict) -> None:
     df = pd.DataFrame(chart_data)
     df = df.sort_values("Rendimiento (%)", ascending=True)
     
-    # Crear gráfico de barras horizontales
-    fig = px.bar(
-        df,
-        x="Rendimiento (%)",
-        y="Mercado",
-        color="Rendimiento (%)",
-        color_continuous_scale=["#dc3545", "#ffc107", "#28a745"],
-        color_continuous_midpoint=0,
-        title="📊 Rendimiento Diario de Índices Globales",
-        labels={"Rendimiento (%)": "Cambio Porcentual (%)", "Mercado": ""},
-        hover_data=["País", "Continente", "Precio", "Moneda"]
+    # Crear gráfico de barras usando Streamlit nativo
+    st.markdown("### 📊 Rendimiento Diario de Índices Globales")
+    st.bar_chart(df.set_index("Mercado")["Rendimiento (%)"], height=400)
+    
+    # Mostrar tabla complementaria
+    st.dataframe(
+        df[["Mercado", "País", "Rendimiento (%)", "Precio", "Moneda"]],
+        use_container_width=True,
+        hide_index=True
     )
-    
-    fig.update_layout(
-        height=600,
-        showlegend=False,
-        xaxis_title="Cambio Porcentual (%)",
-        yaxis_title="",
-        font=dict(size=12)
-    )
-    
-    fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
-    
-    st.plotly_chart(fig, use_container_width=True)
 
-def create_sidebar_content(market_data: Dict) -> None:
+def create_sidebar_content(market_data: Dict) -> Tuple[str, str]:
     """
     Crea contenido del sidebar con información adicional
     
     Args:
         market_data: Diccionario con datos de todos los mercados
+        
+    Returns:
+        Tupla con filtros seleccionados
     """
     st.sidebar.header("🎛️ Panel de Control")
     
@@ -654,18 +768,98 @@ def create_sidebar_content(market_data: Dict) -> None:
         
         st.sidebar.success(f"🏆 **Mejor:** {best_name}\n+{best_performer['change_percent']:.2f}%")
         st.sidebar.error(f"📉 **Peor:** {worst_name}\n{worst_performer['change_percent']:.2f}%")
+        
+        # Estadísticas de fuentes de datos
+        real_data_count = sum(1 for data in valid_data if "🟢" in data.get("data_source", ""))
+        simulated_count = len(valid_data) - real_data_count
+        
+        st.sidebar.info(f"""
+        **📡 Calidad de Datos:**
+        - Datos reales: {real_data_count}
+        - Simulados: {simulated_count}
+        - Total: {len(valid_data)}
+        """)
     
     # Información técnica
     st.sidebar.markdown("---")
     st.sidebar.subheader("ℹ️ Información Técnica")
     st.sidebar.info("""
-    **Fuente de Datos:** Yahoo Finance
-    **Actualización:** Cada 5 minutos
-    **MA50:** Media móvil de 50 períodos
-    **Horarios:** Tiempo local de cada mercado
+    **📊 Fuentes de Datos:**
+    - 🟢 Yahoo Finance API (datos reales)
+    - 🟡 Simulación realista (fallback)
+    
+    **🔄 Actualización:** Cada 5 minutos
+    
+    **📈 Análisis Técnico:**
+    - MA50: Media móvil de 50 períodos
+    - Tendencias: Alcista/Bajista
+    
+    **🕐 Horarios:** 
+    - Tiempo local de cada mercado
+    - Estado: Abierto/Cerrado
     """)
     
+    # Reloj mundial
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🌍 Reloj Mundial")
+    
+    key_timezones = [
+        ("🇺🇸 Nueva York", "America/New_York"),
+        ("🇬🇧 Londres", "Europe/London"), 
+        ("🇩🇪 Frankfurt", "Europe/Berlin"),
+        ("🇯🇵 Tokio", "Asia/Tokyo"),
+        ("🇨🇳 Shanghai", "Asia/Shanghai"),
+        ("🇦🇺 Sydney", "Australia/Sydney")
+    ]
+    
+    for city_name, tz_str in key_timezones:
+        try:
+            tz = pytz.timezone(tz_str)
+            local_time = datetime.now(tz)
+            st.sidebar.text(f"{city_name}: {local_time.strftime('%H:%M')}")
+        except:
+            st.sidebar.text(f"{city_name}: Error")
+    
     return selected_continent, performance_filter
+
+def create_detailed_table(market_data: Dict) -> None:
+    """
+    Crea tabla detallada con todos los datos de mercados
+    
+    Args:
+        market_data: Diccionario con datos de todos los mercados
+    """
+    st.markdown("### 📋 Tabla Detallada de Mercados")
+    
+    # Crear datos para la tabla
+    table_data = []
+    for symbol, data in market_data.items():
+        if data is not None and symbol in GLOBAL_MARKETS:
+            info = GLOBAL_MARKETS[symbol]
+            status = get_market_status(info["timezone"], info["market_open"], info["market_close"])
+            weather = get_weather_emoji(data["change_percent"])
+            
+            table_data.append({
+                "🌤️": weather,
+                "🏛️ Mercado": f"{info['flag']} {info['name']}",
+                "🌍 País": info["country"],
+                "💰 Precio": f"{data['current_price']:,.2f} {info['currency']}",
+                "📊 Cambio": f"{data['change_percent']:+.2f}%",
+                "📈 Tendencia": f"{'📈' if data['ma50_trend'] == 'alcista' else '📉'} {data['ma50_trend'].title()}",
+                "🕐 Estado": f"{'🟢' if status['is_open'] else '🔴'} {status['status']}",
+                "🌐 Hora Local": f"{status['local_time']}",
+                "📊 Volumen": format_number(data['volume']),
+                "📡 Fuente": data['data_source'],
+                "🔄 Actualizado": data['last_updated']
+            })
+    
+    if table_data:
+        df_table = pd.DataFrame(table_data)
+        # Ordenar por cambio porcentual descendente
+        df_table = df_table.sort_values("📊 Cambio", key=lambda x: x.str.replace('%', '').str.replace('+', '').astype(float), ascending=False)
+        st.dataframe(df_table, use_container_width=True, hide_index=True)
+    else:
+        st.warning("⚠️ No hay datos disponibles para mostrar en la tabla")
 
 # 5. FUNCIÓN PRINCIPAL
 # ====================================================================
@@ -682,12 +876,10 @@ def main():
     current_utc = datetime.now(pytz.UTC)
     st.info(f"🕐 **Hora UTC:** {current_utc.strftime('%Y-%m-%d %H:%M:%S')} | 🔄 **Última actualización:** {datetime.now().strftime('%H:%M:%S')}")
     
-    # Sidebar content
-    market_data = {}
-    
     # Mostrar spinner mientras se cargan los datos
-    with st.spinner("📡 Obteniendo datos en tiempo real de los mercados globales..."):
+    with st.spinner("📡 Obteniendo datos de los mercados globales..."):
         # Obtener datos de todos los mercados
+        market_data = {}
         progress_bar = st.progress(0)
         total_markets = len(GLOBAL_MARKETS)
         
@@ -697,6 +889,15 @@ def main():
             time.sleep(0.1)  # Pequeña pausa para evitar rate limiting
         
         progress_bar.empty()
+    
+    # Mostrar estado de conexión de datos
+    valid_data = [data for data in market_data.values() if data is not None]
+    real_data_count = sum(1 for data in valid_data if "🟢" in data.get("data_source", ""))
+    
+    if real_data_count > 0:
+        st.success(f"✅ Datos obtenidos exitosamente: {real_data_count} fuentes reales, {len(valid_data) - real_data_count} simuladas")
+    else:
+        st.info("ℹ️ Usando datos simulados realistas - API externa no disponible")
     
     # Crear sidebar con filtros
     selected_continent, performance_filter = create_sidebar_content(market_data)
@@ -731,72 +932,67 @@ def main():
     st.markdown("### 📈 Análisis Comparativo de Rendimiento")
     create_performance_chart(filtered_data)
     
-    # Tabla detallada
-    st.markdown("### 📋 Tabla Detallada de Mercados")
+    # Mostrar tabla detallada
+    create_detailed_table(filtered_data)
     
-    # Crear DataFrame para la tabla
-    table_data = []
-    for symbol, data in filtered_data.items():
-        if data is not None and symbol in GLOBAL_MARKETS:
-            info = GLOBAL_MARKETS[symbol]
-            status = get_market_status(info["timezone"], info["market_open"], info["market_close"])
-            weather = get_weather_emoji(data["change_percent"])
-            
-            table_data.append({
-                "🌤️": weather,
-                "🏛️ Mercado": f"{info['flag']} {info['name']}",
-                "🌍 País": info["country"],
-                "💰 Precio": f"{data['current_price']:,.2f} {info['currency']}",
-                "📊 Cambio": f"{data['change_percent']:+.2f}%",
-                "📈 Tendencia": f"{'📈' if data['ma50_trend'] == 'alcista' else '📉'} {data['ma50_trend'].title()}",
-                "🕐 Estado": f"{'🟢' if status['is_open'] else '🔴'} {status['status']}",
-                "🌐 Hora Local": f"{status['local_time']}",
-                "📊 Volumen": format_number(data['volume']),
-                "🔄 Actualizado": data['last_updated']
-            })
-    
-    if table_data:
-        df_table = pd.DataFrame(table_data)
-        # Ordenar por cambio porcentual descendente
-        df_table = df_table.sort_values("📊 Cambio", key=lambda x: x.str.replace('%', '').str.replace('+', '').astype(float), ascending=False)
-        st.dataframe(df_table, use_container_width=True, hide_index=True)
-    else:
-        st.warning("⚠️ No hay datos disponibles para mostrar en la tabla")
-    
-    # Footer informativo
+    # Footer informativo mejorado
     st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; padding: 20px; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; margin: 20px 0;'>
-        <h3>🚀 Widget de Mercados Financieros Globales v2.0</h3>
-        <p><strong>📊 Monitoreo en tiempo real de {total_markets} índices bursátiles principales</strong></p>
-        <p>🔄 <em>Datos actualizados cada 5 minutos desde Yahoo Finance</em></p>
-        <p>📈 <em>Análisis técnico con Media Móvil de 50 períodos</em></p>
-        <p>🌍 <em>Horarios precisos de mercados globales</em></p>
+    
+    # Estadísticas finales
+    total_real = sum(1 for data in valid_data if "🟢" in data.get("data_source", ""))
+    total_sim = len(valid_data) - total_real
+    success_rate = (total_real / len(valid_data) * 100) if valid_data else 0
+    
+    st.markdown(f"""
+    <div style='text-align: center; padding: 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px; margin: 20px 0;'>
+        <h3>🚀 Widget de Mercados Financieros Globales v3.0</h3>
+        <p><strong>📊 Monitoreo de {len(GLOBAL_MARKETS)} índices bursátiles principales</strong></p>
+        <p>📡 <em>Datos reales: {total_real} | Simulados: {total_sim} | Tasa de éxito: {success_rate:.1f}%</em></p>
+        <p>🌤️ <em>Visualización meteorológica intuitiva</em></p>
+        <p>📈 <em>Análisis técnico con MA50</em></p>
+        <p>🌍 <em>Horarios precisos globales</em></p>
         
-        <div style="margin: 15px 0;">
-            <span style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; margin: 0 5px; font-size: 12px;">
-                📡 TIEMPO REAL
+        <div style="margin: 20px 0;">
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                📡 HÍBRIDO REAL/SIM
             </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; margin: 0 5px; font-size: 12px;">
-                🌤️ VISUALIZACIÓN METEOROLÓGICA
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                🌤️ CLIMA FINANCIERO
             </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; margin: 0 5px; font-size: 12px;">
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
                 📊 ANÁLISIS TÉCNICO
             </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; margin: 0 5px; font-size: 12px;">
-                🔍 FILTROS AVANZADOS
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                🔍 FILTROS INTELIGENTES
+            </span>
+            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
+                🕐 TIEMPO REAL
             </span>
         </div>
         
-        <p style='font-size: 11px; margin-top: 15px; opacity: 0.8;'>
-            ⚠️ <strong>Aviso Legal:</strong> Esta herramienta es exclusivamente para fines educativos e informativos. 
-            No constituye asesoramiento financiero. Las decisiones de inversión deben basarse en análisis profesional.
+        <p style='font-size: 12px; margin-top: 20px; opacity: 0.9;'>
+            <strong>🌟 Características Principales:</strong><br>
+            • Intentos de conexión a Yahoo Finance API para datos reales<br>
+            • Sistema de fallback con simulación ultra-realista<br>
+            • 7 niveles de emojis meteorológicos por rendimiento<br>
+            • Análisis de tendencias con Media Móvil 50 períodos<br>
+            • Horarios de mercado precisos por zona horaria<br>
+            • Filtrado avanzado por continente y rendimiento<br>
+            • Reloj mundial integrado en sidebar<br>
+            • Estadísticas globales y mejores/peores performers
         </p>
-        <p style='font-size: 9px; margin-top: 5px; opacity: 0.7;'>
-            Desarrollado con Streamlit + yfinance | Datos de Yahoo Finance | Diseño responsive
+        
+        <p style='font-size: 11px; margin-top: 15px; opacity: 0.8;'>
+            ⚠️ <strong>Aviso Legal:</strong> Herramienta educativa e informativa únicamente. 
+            No constituye asesoramiento financiero. Las decisiones de inversión requieren análisis profesional.
+        </p>
+        
+        <p style='font-size: 10px; margin-top: 10px; opacity: 0.7;'>
+            Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | 
+            Desarrollado con Streamlit | Compatible con Streamlit Cloud
         </p>
     </div>
-    """.format(total_markets=len(GLOBAL_MARKETS)), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # 6. EJECUCIÓN PRINCIPAL
 # ====================================================================
@@ -809,5 +1005,10 @@ if __name__ == "__main__":
         logger.error(f"Error en main(): {str(e)}")
         
         # Mostrar información de debug en modo de desarrollo
-        if st.checkbox("🔧 Mostrar información de debug"):
+        with st.expander("🔧 Información de Debug"):
             st.exception(e)
+            st.write("**Variables del sistema:**")
+            st.write(f"- Python version: {st.__version__ if hasattr(st, '__version__') else 'N/A'}")
+            st.write(f"- Timestamp: {datetime.now()}")
+            st.write(f"- Mercados configurados: {len(GLOBAL_MARKETS)}")
+            st.write(f"- Timezone UTC: {datetime.now(pytz.UTC)}")
