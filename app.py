@@ -26,7 +26,7 @@ import logging
 # Configuración de página
 st.set_page_config(
     page_title="🌍 Mercados Globales | Widget Financiero",
-    page_icon="🌍",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
