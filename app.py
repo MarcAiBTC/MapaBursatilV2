@@ -468,14 +468,83 @@ def format_number(number: float, currency: str = "") -> str:
 
 def create_world_map_visualization(market_data: Dict) -> None:
     """
-    Crea visualización tipo mapa mundial con emojis meteorológicos
+    Crea mapa mundial visual interactivo con vista rápida de todos los mercados
     
     Args:
         market_data: Diccionario con datos de todos los mercados
     """
-    st.markdown("### 🌍 Mapa Mundial de Mercados Financieros")
+    st.markdown("### 🗺️ Mapa Mundial de Mercados Financieros")
+    st.markdown("#### 🌍 Vista Global de un Solo Vistazo")
     
-    # Organizar por continentes
+    # Crear el mapa mundial usando columnas y diseño geográfico
+    # Organizar mercados por ubicación geográfica aproximada
+    
+    # Fila 1: Asia-Pacífico (arriba)
+    st.markdown("##### 🌏 Asia-Pacífico")
+    asia_cols = st.columns([1, 2, 2, 2, 1])
+    
+    with asia_cols[1]:  # Japón
+        if "^N225" in market_data and market_data["^N225"]:
+            create_mini_market_card("^N225", market_data["^N225"])
+    
+    with asia_cols[2]:  # China/Shanghai
+        if "000001.SS" in market_data and market_data["000001.SS"]:
+            create_mini_market_card("000001.SS", market_data["000001.SS"])
+    
+    with asia_cols[3]:  # Hong Kong
+        if "^HSI" in market_data and market_data["^HSI"]:
+            create_mini_market_card("^HSI", market_data["^HSI"])
+    
+    with asia_cols[4]:  # Australia
+        if "^AXJO" in market_data and market_data["^AXJO"]:
+            create_mini_market_card("^AXJO", market_data["^AXJO"])
+    
+    st.markdown("---")
+    
+    # Fila 2: Europa (centro)
+    st.markdown("##### 🌍 Europa")
+    europe_cols = st.columns(4)
+    
+    european_markets = ["^FTSE", "^GDAXI", "^FCHI", "^IBEX"]
+    for idx, symbol in enumerate(european_markets):
+        with europe_cols[idx]:
+            if symbol in market_data and market_data[symbol]:
+                create_mini_market_card(symbol, market_data[symbol])
+    
+    st.markdown("---")
+    
+    # Fila 3: Américas (abajo)
+    st.markdown("##### 🌎 Américas")
+    americas_cols = st.columns([2, 2, 1, 2])
+    
+    with americas_cols[0]:  # Estados Unidos (S&P 500)
+        if "^GSPC" in market_data and market_data["^GSPC"]:
+            create_mini_market_card("^GSPC", market_data["^GSPC"])
+    
+    with americas_cols[1]:  # Estados Unidos (NASDAQ)
+        if "^IXIC" in market_data and market_data["^IXIC"]:
+            create_mini_market_card("^IXIC", market_data["^IXIC"])
+    
+    with americas_cols[2]:  # Canadá
+        if "^GSPTSE" in market_data and market_data["^GSPTSE"]:
+            create_mini_market_card("^GSPTSE", market_data["^GSPTSE"])
+    
+    with americas_cols[3]:  # Brasil
+        if "^BVSP" in market_data and market_data["^BVSP"]:
+            create_mini_market_card("^BVSP", market_data["^BVSP"])
+    
+    # México en una fila separada centrada
+    mexico_col = st.columns([2, 1, 2])
+    with mexico_col[1]:
+        if "^MXX" in market_data and market_data["^MXX"]:
+            create_mini_market_card("^MXX", market_data["^MXX"])
+    
+    st.markdown("---")
+    
+    # Resumen visual global
+    create_global_heatmap(market_data)
+    
+    # Organizar por continentes para vista detallada
     continents = {}
     for symbol, market_info in GLOBAL_MARKETS.items():
         continent = market_info["continent"]
@@ -500,12 +569,14 @@ def create_world_map_visualization(market_data: Dict) -> None:
                 "status": market_status
             })
     
+    st.markdown("#### 📋 Vista Detallada por Continentes")
+    
     # Mostrar cada continente
     for continent, markets in continents.items():
         if not markets:
             continue
             
-        st.markdown(f"#### {continent}")
+        st.markdown(f"##### {continent}")
         
         # Crear columnas para los mercados del continente
         cols = st.columns(min(len(markets), 4))
@@ -515,6 +586,122 @@ def create_world_map_visualization(market_data: Dict) -> None:
                 create_market_card(market)
         
         st.markdown("---")
+
+def create_mini_market_card(symbol: str, data: Dict) -> None:
+    """
+    Crea una tarjeta mini para el mapa mundial
+    
+    Args:
+        symbol: Símbolo del mercado
+        data: Datos del mercado
+    """
+    if symbol not in GLOBAL_MARKETS:
+        return
+        
+    info = GLOBAL_MARKETS[symbol]
+    weather = get_weather_emoji(data["change_percent"])
+    status = get_market_status(info["timezone"], info["market_open"], info["market_close"])
+    status_emoji = "🟢" if status["is_open"] else "🔴"
+    
+    # Color de fondo basado en rendimiento
+    if data["change_percent"] > 0:
+        bg_color = "#d4edda"  # Verde claro
+        border_color = "#28a745"
+    elif data["change_percent"] < 0:
+        bg_color = "#f8d7da"  # Rojo claro
+        border_color = "#dc3545"
+    else:
+        bg_color = "#e2e3e5"  # Gris claro
+        border_color = "#6c757d"
+    
+    st.markdown(f"""
+    <div style="
+        background-color: {bg_color}; 
+        border: 2px solid {border_color}; 
+        border-radius: 10px; 
+        padding: 15px; 
+        text-align: center; 
+        margin: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    ">
+        <div style="font-size: 24px; margin-bottom: 5px;">{weather}</div>
+        <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">{info['flag']} {info['name']}</div>
+        <div style="font-size: 14px; color: #666; margin-bottom: 5px;">{info['country']}</div>
+        <div style="font-size: 18px; font-weight: bold; color: {border_color};">
+            {data['change_percent']:+.2f}%
+        </div>
+        <div style="font-size: 12px; margin-top: 5px;">
+            {status_emoji} {status['status']} • {status['local_time']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def create_global_heatmap(market_data: Dict) -> None:
+    """
+    Crea un heatmap visual global del rendimiento
+    
+    Args:
+        market_data: Diccionario con datos de todos los mercados
+    """
+    st.markdown("#### 🌡️ Heatmap Global de Rendimiento")
+    
+    # Crear datos para el heatmap
+    heatmap_data = []
+    for symbol, data in market_data.items():
+        if data and symbol in GLOBAL_MARKETS:
+            info = GLOBAL_MARKETS[symbol]
+            heatmap_data.append({
+                "Mercado": f"{info['flag']} {info['name']}",
+                "Rendimiento": data["change_percent"],
+                "País": info["country"],
+                "Continente": info["continent"]
+            })
+    
+    if heatmap_data:
+        # Ordenar por rendimiento
+        heatmap_data.sort(key=lambda x: x["Rendimiento"], reverse=True)
+        
+        # Crear visualización en columnas por rendimiento
+        col1, col2, col3 = st.columns(3)
+        
+        # Mejores performers
+        with col1:
+            st.markdown("##### 🟢 Mejores Performers")
+            best_performers = [x for x in heatmap_data if x["Rendimiento"] > 0][:4]
+            for item in best_performers:
+                weather = get_weather_emoji(item["Rendimiento"])
+                st.markdown(f"""
+                <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                    <strong>{weather} {item['Mercado']}</strong><br>
+                    <span style="color: #28a745; font-weight: bold;">+{item['Rendimiento']:.2f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Neutros
+        with col2:
+            st.markdown("##### ⚪ Rendimiento Neutral")
+            neutral_performers = [x for x in heatmap_data if -0.5 <= x["Rendimiento"] <= 0.5][:4]
+            for item in neutral_performers:
+                weather = get_weather_emoji(item["Rendimiento"])
+                st.markdown(f"""
+                <div style="background: #e2e3e5; border-left: 4px solid #6c757d; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                    <strong>{weather} {item['Mercado']}</strong><br>
+                    <span style="color: #6c757d; font-weight: bold;">{item['Rendimiento']:+.2f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Peores performers
+        with col3:
+            st.markdown("##### 🔴 Peores Performers")
+            worst_performers = [x for x in heatmap_data if x["Rendimiento"] < 0][-4:]
+            for item in worst_performers:
+                weather = get_weather_emoji(item["Rendimiento"])
+                st.markdown(f"""
+                <div style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                    <strong>{weather} {item['Mercado']}</strong><br>
+                    <span style="color: #dc3545; font-weight: bold;">{item['Rendimiento']:.2f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
 
 def create_market_card(market: Dict) -> None:
     """
@@ -943,56 +1130,66 @@ def main():
     total_sim = len(valid_data) - total_real
     success_rate = (total_real / len(valid_data) * 100) if valid_data else 0
     
-    st.markdown(f"""
-    <div style='text-align: center; padding: 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px; margin: 20px 0;'>
-        <h3>🚀 Widget de Mercados Financieros Globales v3.0</h3>
-        <p><strong>📊 Monitoreo de {len(GLOBAL_MARKETS)} índices bursátiles principales</strong></p>
-        <p>📡 <em>Datos reales: {total_real} | Simulados: {total_sim} | Tasa de éxito: {success_rate:.1f}%</em></p>
-        <p>🌤️ <em>Visualización meteorológica intuitiva</em></p>
-        <p>📈 <em>Análisis técnico con MA50</em></p>
-        <p>🌍 <em>Horarios precisos globales</em></p>
+    st.markdown("### 🚀 Widget de Mercados Financieros Globales v3.0")
+    
+    # Crear métricas finales en columnas
+    footer_cols = st.columns(4)
+    
+    with footer_cols[0]:
+        st.metric("📊 Mercados Monitoreados", len(GLOBAL_MARKETS), "indices principales")
+    
+    with footer_cols[1]:
+        st.metric("📡 Datos Reales", total_real, f"de {len(valid_data)} total")
+    
+    with footer_cols[2]:
+        st.metric("🟡 Datos Simulados", total_sim, "fallback realista")
+    
+    with footer_cols[3]:
+        st.metric("✅ Tasa de Éxito", f"{success_rate:.1f}%", "conexión API")
+    
+    # Información técnica en expander
+    with st.expander("ℹ️ Información Técnica Detallada"):
+        st.markdown("""
+        **🌟 Características Principales:**
+        - 🗺️ **Mapa mundial interactivo** con vista geográfica de mercados
+        - 🌤️ **7 niveles de emojis meteorológicos** por rendimiento
+        - 📡 **Sistema híbrido**: Datos reales de Yahoo Finance + fallback inteligente
+        - 📊 **Análisis técnico**: Media Móvil 50 períodos calculada en tiempo real
+        - 🕐 **Horarios precisos**: Estado abierto/cerrado por zona horaria
+        - 🔍 **Filtros avanzados**: Por continente y tipo de rendimiento
+        - 🌡️ **Heatmap global**: Visualización rápida de mejores/peores performers
+        - 📈 **Estadísticas globales**: Sentimiento de mercado y promedios
         
-        <div style="margin: 20px 0;">
-            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
-                📡 HÍBRIDO REAL/SIM
-            </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
-                🌤️ CLIMA FINANCIERO
-            </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
-                📊 ANÁLISIS TÉCNICO
-            </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
-                🔍 FILTROS INTELIGENTES
-            </span>
-            <span style="background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 20px; margin: 0 5px; font-size: 12px;">
-                🕐 TIEMPO REAL
-            </span>
-        </div>
+        **📊 Mercados Incluidos:**
+        - **🇺🇸 Estados Unidos**: S&P 500, NASDAQ
+        - **🇨🇦 Canadá**: TSX
+        - **🇬🇧 Reino Unido**: FTSE 100
+        - **🇩🇪 Alemania**: DAX
+        - **🇫🇷 Francia**: CAC 40
+        - **🇪🇸 España**: IBEX 35
+        - **🇯🇵 Japón**: Nikkei 225
+        - **🇨🇳 China**: Shanghai Composite
+        - **🇭🇰 Hong Kong**: Hang Seng
+        - **🇦🇺 Australia**: ASX 200
+        - **🇧🇷 Brasil**: Bovespa
+        - **🇲🇽 México**: IPC
         
-        <p style='font-size: 12px; margin-top: 20px; opacity: 0.9;'>
-            <strong>🌟 Características Principales:</strong><br>
-            • Intentos de conexión a Yahoo Finance API para datos reales<br>
-            • Sistema de fallback con simulación ultra-realista<br>
-            • 7 niveles de emojis meteorológicos por rendimiento<br>
-            • Análisis de tendencias con Media Móvil 50 períodos<br>
-            • Horarios de mercado precisos por zona horaria<br>
-            • Filtrado avanzado por continente y rendimiento<br>
-            • Reloj mundial integrado en sidebar<br>
-            • Estadísticas globales y mejores/peores performers
-        </p>
-        
-        <p style='font-size: 11px; margin-top: 15px; opacity: 0.8;'>
-            ⚠️ <strong>Aviso Legal:</strong> Herramienta educativa e informativa únicamente. 
-            No constituye asesoramiento financiero. Las decisiones de inversión requieren análisis profesional.
-        </p>
-        
-        <p style='font-size: 10px; margin-top: 10px; opacity: 0.7;'>
-            Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | 
-            Desarrollado con Streamlit | Compatible con Streamlit Cloud
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+        **🔧 Tecnología:**
+        - Desarrollado con Streamlit puro (sin dependencias externas)
+        - Compatible con Streamlit Cloud
+        - Cache inteligente de 5 minutos
+        - Sistema robusto de manejo de errores
+        - Interfaz responsive para móviles y desktop
+        """)
+    
+    # Aviso legal
+    st.info("""
+    ⚠️ **Aviso Legal**: Esta herramienta es exclusivamente para fines educativos e informativos. 
+    No constituye asesoramiento financiero. Las decisiones de inversión requieren análisis profesional independiente.
+    """)
+    
+    # Timestamp final
+    st.caption(f"🕐 Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | Desarrollado con ❤️ usando Streamlit")
 
 # 6. EJECUCIÓN PRINCIPAL
 # ====================================================================
