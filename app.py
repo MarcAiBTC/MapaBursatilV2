@@ -783,7 +783,7 @@ def create_market_card(symbol, config, data):
         st.info(f"📅 {market_status['next_action']}")
         
         # Timestamp de actualización
-        st.caption(f"🔄 Actualizado: {data['last_update']} | Ref. Frankfurt: {market_status['reference_note']}")status_emoji}", expanded=True):
+        st.caption(f"🔄 Actualizado: {data['last_update']} | Ref. Frankfurt: {market_status['reference_note']}")
                             
                             # Métricas principales en columnas
                             col1, col2 = st.columns(2)
