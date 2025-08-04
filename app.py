@@ -850,25 +850,25 @@ def create_summary_metrics(market_data):
     avg_change = sum(data['change_percent'] for data in valid_data) / total_markets
     real_data_count = sum(1 for data in valid_data if data.get('is_real', False))
     
-    # Mostrar métricas
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # Mostrar métricas en columnas
+    metric_cols = st.columns(6)
     
-    with col1:
+    with metric_cols[0]:
         st.metric("☀️ Subida Fuerte", strong_up, f"{strong_up/total_markets*100:.0f}%")
     
-    with col2:
+    with metric_cols[1]:
         st.metric("🌤️ Subida Leve", light_up, f"{light_up/total_markets*100:.0f}%")
     
-    with col3:
+    with metric_cols[2]:
         st.metric("☁️ Bajada Leve", light_down, f"{light_down/total_markets*100:.0f}%")
     
-    with col4:
+    with metric_cols[3]:
         st.metric("🌩️ Bajada Fuerte", strong_down, f"{strong_down/total_markets*100:.0f}%")
     
-    with col5:
+    with metric_cols[4]:
         st.metric("🟢 Mercados Abiertos", f"{open_markets}/{len(MARKETS_CONFIG)}", f"{open_markets/len(MARKETS_CONFIG)*100:.0f}%")
     
-    with col6:
+    with metric_cols[5]:
         st.metric("📊 Promedio Global", f"{avg_change:+.2f}%", f"{real_data_count} datos reales")
 
 def create_detailed_table(market_data):
