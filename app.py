@@ -365,10 +365,16 @@ def get_all_market_data():
     return market_data
 
 def get_market_status(timezone_str, open_hour, close_hour):
-    """Calcula el estado real del mercado"""
+    """Calcula el estado real del mercado con hora de Frankfurt como referencia"""
     try:
+        # Zona horaria del mercado
         market_tz = pytz.timezone(timezone_str)
         now_market = datetime.now(market_tz)
+        
+        # Zona horaria de Frankfurt para referencia
+        frankfurt_tz = pytz.timezone('Europe/Berlin')
+        now_frankfurt = datetime.now(frankfurt_tz)
+        
         weekday = now_market.weekday()
         current_hour = now_market.hour
         
@@ -377,9 +383,11 @@ def get_market_status(timezone_str, open_hour, close_hour):
             return {
                 'is_open': False,
                 'status': 'Cerrado (Fin de semana)',
-                'next_action': f'Abre el lunes a las {open_hour:02d}:00',
+                'next_action': f'Abre el lunes a las {open_hour:02d}:00 (hora local)',
                 'local_time': now_market.strftime('%H:%M'),
-                'timezone_name': timezone_str.split('/')[-1]
+                'timezone_name': timezone_str.split('/')[-1],
+                'frankfurt_time': now_frankfurt.strftime('%H:%M'),
+                'reference_note': f'Hora Frankfurt: {now_frankfurt.strftime("%H:%M")}'
             }
         
         # Verificar horario
@@ -387,33 +395,43 @@ def get_market_status(timezone_str, open_hour, close_hour):
             return {
                 'is_open': True,
                 'status': 'Abierto',
-                'next_action': f'Cierra a las {close_hour:02d}:00',
+                'next_action': f'Cierra a las {close_hour:02d}:00 (hora local)',
                 'local_time': now_market.strftime('%H:%M'),
-                'timezone_name': timezone_str.split('/')[-1]
+                'timezone_name': timezone_str.split('/')[-1],
+                'frankfurt_time': now_frankfurt.strftime('%H:%M'),
+                'reference_note': f'Hora Frankfurt: {now_frankfurt.strftime("%H:%M")}'
             }
         elif current_hour < open_hour:
             return {
                 'is_open': False,
                 'status': 'Pre-mercado',
-                'next_action': f'Abre a las {open_hour:02d}:00',
+                'next_action': f'Abre a las {open_hour:02d}:00 (hora local)',
                 'local_time': now_market.strftime('%H:%M'),
-                'timezone_name': timezone_str.split('/')[-1]
+                'timezone_name': timezone_str.split('/')[-1],
+                'frankfurt_time': now_frankfurt.strftime('%H:%M'),
+                'reference_note': f'Hora Frankfurt: {now_frankfurt.strftime("%H:%M")}'
             }
         else:
             return {
                 'is_open': False,
                 'status': 'Post-mercado',
-                'next_action': f'Abre mañana a las {open_hour:02d}:00',
+                'next_action': f'Abre mañana a las {open_hour:02d}:00 (hora local)',
                 'local_time': now_market.strftime('%H:%M'),
-                'timezone_name': timezone_str.split('/')[-1]
+                'timezone_name': timezone_str.split('/')[-1],
+                'frankfurt_time': now_frankfurt.strftime('%H:%M'),
+                'reference_note': f'Hora Frankfurt: {now_frankfurt.strftime("%H:%M")}'
             }
     except:
+        frankfurt_tz = pytz.timezone('Europe/Berlin')
+        now_frankfurt = datetime.now(frankfurt_tz)
         return {
             'is_open': False,
             'status': 'Error',
-            'next_action': 'Verificar',
+            'next_action': 'Verificar horario',
             'local_time': '??:??',
-            'timezone_name': 'Unknown'
+            'timezone_name': 'Unknown',
+            'frankfurt_time': now_frankfurt.strftime('%H:%M'),
+            'reference_note': f'Hora Frankfurt: {now_frankfurt.strftime("%H:%M")}'
         }
 
 def get_emoji_by_change(change_pct):
@@ -439,11 +457,11 @@ def get_color_by_change(change_pct):
         return "#FF1744"
 
 def create_market_cards(market_data):
-    """Crea tarjetas de mercado usando componentes nativos de Streamlit"""
+    """Crea tarjetas de mercado mejoradas y más estéticas"""
     
     st.markdown("### 🌍 Mercados Financieros Mundiales")
     
-    # Organizar por regiones
+    # Organizar por regiones con mejor distribución
     regions = {
         "🌅 Asia-Pacífico": ["^N225", "000001.SS", "399001.SZ", "^HSI", "^AXJO"],
         "🌍 Europa": ["^FTSE", "^GDAXI", "^FCHI", "^IBEX"],
@@ -460,53 +478,70 @@ def create_market_cards(market_data):
         if not region_markets:
             continue
         
-        # Crear columnas
-        cols = st.columns(len(region_markets))
+        # Para regiones con muchos mercados, usar más filas
+        markets_per_row = 3 if len(region_markets) > 4 else len(region_markets)
         
-        for i, (symbol, config) in enumerate(region_markets):
-            with cols[i]:
-                data = market_data[symbol]
-                market_status = get_market_status(config['timezone'], config['open_hour'], config['close_hour'])
-                
-                # Datos para mostrar
-                change_pct = data['change_percent']
-                price = data['price']
-                weather_emoji = get_emoji_by_change(change_pct)
-                color = get_color_by_change(change_pct)
-                status_emoji = "🟢" if market_status['is_open'] else "🔴"
-                
-                # Crear tarjeta usando componentes nativos
-                with st.container():
-                    # Título del mercado
-                    st.markdown(f"**{weather_emoji} {config['name'].split('(')[0].strip()}**")
+        # Dividir mercados en filas
+        for i in range(0, len(region_markets), markets_per_row):
+            row_markets = region_markets[i:i + markets_per_row]
+            cols = st.columns(len(row_markets))
+            
+            for j, (symbol, config) in enumerate(row_markets):
+                with cols[j]:
+                    data = market_data[symbol]
+                    market_status = get_market_status(config['timezone'], config['open_hour'], config['close_hour'])
                     
-                    # Métricas principales
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric(
-                            label="Precio",
-                            value=f"{price:,.2f} {config['currency']}",
-                            delta=f"{change_pct:+.2f}%"
-                        )
+                    # Datos para mostrar
+                    change_pct = data['change_percent']
+                    price = data['price']
+                    weather_emoji = get_emoji_by_change(change_pct)
+                    status_emoji = "🟢" if market_status['is_open'] else "🔴"
                     
-                    with col2:
-                        st.metric(
-                            label="Estado",
-                            value=market_status['status'],
-                            delta=f"Vol: {data['volume']}"
-                        )
+                    # Crear contenedor con borde colorido
+                    border_color = get_color_by_change(change_pct)
                     
-                    # Información adicional
-                    st.markdown(f"""
-                    - **País**: {config['country']}
-                    - **Hora local**: {market_status['local_time']} ({market_status['timezone_name']})
-                    - **{market_status['next_action']}**
-                    - **Tendencia**: {data['ma200_trend']}
-                    - **Fuente**: {data['source']}
-                    - **Actualizado**: {data['last_update']}
-                    """)
-                
-                st.markdown("---")
+                    with st.container():
+                        # Usar expander para mejor organización
+                        with st.expander(f"{weather_emoji} **{config['name'].split('(')[0].strip()}** {status_emoji}", expanded=True):
+                            
+                            # Métricas principales en columnas
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric(
+                                    label="💰 Precio Actual",
+                                    value=f"{price:,.2f}",
+                                    delta=f"{change_pct:+.2f}%"
+                                )
+                            
+                            with col2:
+                                st.metric(
+                                    label="📊 Volumen",
+                                    value=data['volume'],
+                                    delta=data['ma200_trend']
+                                )
+                            
+                            # Información detallada en formato limpio
+                            st.markdown("**📍 Información del Mercado:**")
+                            
+                            info_col1, info_col2 = st.columns(2)
+                            with info_col1:
+                                st.write(f"• **País**: {config['country']}")
+                                st.write(f"• **Moneda**: {config['currency']}")
+                                st.write(f"• **Estado**: {status_emoji} {market_status['status']}")
+                            
+                            with info_col2:
+                                st.write(f"• **Hora local**: {market_status['local_time']}")
+                                st.write(f"• **Frankfurt**: {market_status['frankfurt_time']}")
+                                st.write(f"• **Fuente**: {data['source']}")
+                            
+                            # Horarios y acciones
+                            st.markdown("**🕐 Horarios y Estado:**")
+                            st.info(f"📅 {market_status['next_action']}")
+                            
+                            # Timestamp de actualización
+                            st.caption(f"🔄 Actualizado: {data['last_update']} | Ref. Frankfurt: {market_status['reference_note']}")
+        
+        st.markdown("---")  # Separador entre regiones
 
 def create_summary_metrics(market_data):
     """Métricas de resumen usando componentes nativos"""
@@ -556,7 +591,7 @@ def create_summary_metrics(market_data):
         st.metric("📊 Promedio Global", f"{avg_change:+.2f}%", f"{real_data_count} datos reales")
 
 def create_detailed_table(market_data):
-    """Tabla detallada con todos los datos"""
+    """Tabla detallada con todos los datos y hora de Frankfurt como referencia"""
     
     table_data = []
     
@@ -569,7 +604,7 @@ def create_detailed_table(market_data):
                 'Mercado': config['name'],
                 'País': config['country'],
                 'Región': config['region'],
-                'Emoji': get_emoji_by_change(data['change_percent']),
+                'Clima': get_emoji_by_change(data['change_percent']),
                 'Precio': f"{data['price']:,.2f} {config['currency']}",
                 'Cambio (%)': f"{data['change_percent']:+.2f}%",
                 'Cierre Anterior': f"{data.get('previous_close', 0):,.2f}",
@@ -577,6 +612,7 @@ def create_detailed_table(market_data):
                 'Tendencia MA200': data['ma200_trend'],
                 'Estado': f"{'🟢' if market_status['is_open'] else '🔴'} {market_status['status']}",
                 'Hora Local': f"{market_status['local_time']} ({market_status['timezone_name']})",
+                'Hora Frankfurt': market_status['frankfurt_time'],
                 'Próxima Acción': market_status['next_action'],
                 'Fuente de Datos': data['source'],
                 'Última Actualización': data['last_update']
@@ -614,29 +650,40 @@ def main():
         
         st.markdown("---")
         
-        # Horarios mundiales
-        st.subheader("🌍 Horarios Actuales")
+        # Hora de Frankfurt como referencia principal
+        frankfurt_tz = pytz.timezone('Europe/Berlin')
+        frankfurt_time = datetime.now(frankfurt_tz)
+        
+        st.subheader("🇩🇪 Hora de Referencia")
+        st.info(f"**Frankfurt**: {frankfurt_time.strftime('%H:%M:%S')} ({frankfurt_time.strftime('%Y-%m-%d')})")
+        
+        st.markdown("---")
+        
+        # Horarios mundiales comparados con Frankfurt
+        st.subheader("🌍 Comparación Horaria")
         
         key_timezones = [
-            ('New York', 'America/New_York'),
-            ('Londres', 'Europe/London'),
-            ('Frankfurt', 'Europe/Berlin'),
-            ('Tokio', 'Asia/Tokyo'),
-            ('Shanghai', 'Asia/Shanghai'),
-            ('Sydney', 'Australia/Sydney')
+            ('🇺🇸 New York', 'America/New_York'),
+            ('🇬🇧 Londres', 'Europe/London'),
+            ('🇯🇵 Tokio', 'Asia/Tokyo'),
+            ('🇨🇳 Shanghai', 'Asia/Shanghai'),
+            ('🇦🇺 Sydney', 'Australia/Sydney'),
+            ('🇧🇷 São Paulo', 'America/Sao_Paulo')
         ]
         
         for city, tz_str in key_timezones:
             try:
                 tz = pytz.timezone(tz_str)
-                local_time = current_utc.astimezone(tz)
-                st.text(f"{city}: {local_time.strftime('%H:%M')}")
+                local_time = datetime.now(tz)
+                time_diff = local_time.hour - frankfurt_time.hour
+                diff_text = f"({time_diff:+d}h)" if time_diff != 0 else "(=)"
+                st.text(f"{city}: {local_time.strftime('%H:%M')} {diff_text}")
             except:
                 st.text(f"{city}: Error")
         
         st.markdown("---")
         
-        # Controles
+        # Controles mejorados
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔄 Actualizar", type="primary"):
@@ -648,11 +695,19 @@ def main():
                 st.cache_data.clear()
                 st.success("✅ Cache limpiado")
         
+        # Información del sistema
+        st.markdown("---")
+        st.markdown("**🔧 Sistema:**")
         st.markdown(f"""
-        **📈 Mercados monitoreados**: {len(MARKETS_CONFIG)}  
-        **🔄 Cache**: 2 minutos  
-        **📡 Fuentes**: Yahoo Finance, Finnhub, Fallback  
+        - **Mercados**: {len(MARKETS_CONFIG)}
+        - **Cache**: 2 minutos
+        - **Referencia**: Frankfurt
+        - **APIs**: Yahoo Finance + Finnhub
         """)
+        
+        # Estadísticas en tiempo real
+        real_data_count = sum(1 for data in market_data.values() if data and data.get('is_real', False)) if 'market_data' in locals() else 0
+        st.markdown(f"- **Datos reales**: {real_data_count} activos")
     
     # Obtener datos
     with st.spinner("📡 Conectando con mercados mundiales..."):
@@ -717,21 +772,24 @@ def main():
     
     # Footer profesional
     st.markdown("---")
-    st.markdown("""
+    total_markets = len(MARKETS_CONFIG)
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+    
+    st.markdown(f"""
     <div style='text-align: center; padding: 20px; background-color: #f0f2f6; border-radius: 10px; margin: 20px 0;'>
         <h4>🚀 Mapa Financiero Mundial v6.0 - Datos Reales</h4>
-        <p><strong>📊 {total_count} mercados globales monitoreados</strong></p>
+        <p><strong>📊 {total_markets} mercados globales monitoreados</strong></p>
         <p>📡 <em>Datos en tiempo real de Yahoo Finance y Finnhub</em></p>
-        <p>🌍 <em>Horarios precisos con zonas horarias mundiales</em></p>
+        <p>🌍 <em>Horarios precisos con zona horaria de Frankfurt como referencia</em></p>
         <p style='font-size: 12px; color: #666; margin-top: 15px;'>
             ⚠️ <strong>Aviso:</strong> Esta herramienta es solo para fines educativos e informativos. 
             No constituye asesoramiento financiero. Las decisiones de inversión deben basarse en análisis profesional.
         </p>
         <p style='font-size: 11px; color: #888; margin-top: 10px;'>
-            Última actualización de la aplicación: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+            Última actualización de la aplicación: {current_timestamp}
         </p>
     </div>
-    """.format(total_count=len(MARKETS_CONFIG)), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # Ejecutar aplicación principal
 if __name__ == "__main__":
