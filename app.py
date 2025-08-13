@@ -1,15 +1,12 @@
 # ================================================================
-# Mapa Bursátil Mundial — Streamlit (definitivo, 1 archivo)
+# Mapa Bursátil Mundial — Streamlit (definitivo)
 # ================================================================
-# - Mapa mundial interactivo:
-#     • Plotly scattergeo (si disponible)
-#     • Fallback PyDeck si Plotly no está instalado
-# - Una sola tabla resumen (pestaña "Resumen")
-# - MA50 real por mercado (Yahoo Chart API)
-# - Sidebar con filtros + botón "Actualizar datos"
-# - KPIs en cabecera (verde/rojo, % medio, best/worst)
-# - Conversión opcional a EUR (tickers EURXXX=X)
-# - Caché con st.cache_data, manejo de errores
+# - Mapa blanco: Plotly (si disponible) / PyDeck (fallback)
+# - Etiquetas cortas (emoji + %). Texto grande ~16-18
+# - Una sola tabla; MA50 real (Yahoo Chart API)
+# - Sidebar con filtros; KPIs; Pestañas
+# - Conversión opcional a EUR con EURXXX=X
+# - Caché con st.cache_data; sin pip en caliente
 # ================================================================
 
 from __future__ import annotations
@@ -20,17 +17,15 @@ import pytz
 from datetime import datetime
 from typing import Dict, Optional, Tuple, List
 
-# ---- Plotly si está disponible; si no, fallback a PyDeck ----
+# -------- Plotly si existe; si no, PyDeck fallback ----------
 PLOTLY_OK = True
 try:
     import plotly.graph_objects as go
 except Exception:
     PLOTLY_OK = False
-    import pydeck as pdk  # PyDeck viene con Streamlit
+    import pydeck as pdk  # viene con Streamlit
 
-# ----------------------------
-# Configuración general
-# ----------------------------
+# ---------------- Config general ----------------
 st.set_page_config(
     page_title="Mapa Bursátil Mundial",
     page_icon="🌍",
@@ -38,32 +33,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ----------------------------
-# Catálogo de mercados
-# ----------------------------
+# ---------------- Mercado catálogo ----------------
 MARKETS: Dict[str, Dict] = {
-    # Norteamérica
     "^GSPC": {"name": "S&P 500", "country": "Estados Unidos", "currency": "USD", "tz": "America/New_York", "open": 9, "close": 16, "lat": 40.7069, "lon": -74.0113, "fallback": "SPY"},
     "^IXIC": {"name": "NASDAQ", "country": "Estados Unidos", "currency": "USD", "tz": "America/New_York", "open": 9, "close": 16, "lat": 40.7549, "lon": -73.9840, "fallback": None},
     "^GSPTSE": {"name": "TSX", "country": "Canadá", "currency": "CAD", "tz": "America/Toronto", "open": 9, "close": 16, "lat": 43.6487, "lon": -79.3817, "fallback": None},
-    # Europa
     "^FTSE": {"name": "FTSE 100", "country": "Reino Unido", "currency": "GBP", "tz": "Europe/London", "open": 8, "close": 16, "lat": 51.5136, "lon": -0.0890, "fallback": None},
     "^GDAXI": {"name": "DAX", "country": "Alemania", "currency": "EUR", "tz": "Europe/Berlin", "open": 9, "close": 17, "lat": 50.1109, "lon": 8.6821, "fallback": None},
     "^FCHI": {"name": "CAC 40", "country": "Francia", "currency": "EUR", "tz": "Europe/Paris", "open": 9, "close": 17, "lat": 48.8566, "lon": 2.3522, "fallback": None},
     "^IBEX": {"name": "IBEX 35", "country": "España", "currency": "EUR", "tz": "Europe/Madrid", "open": 9, "close": 17, "lat": 40.4168, "lon": -3.7038, "fallback": None},
-    # Asia-Pacífico
     "^N225": {"name": "Nikkei 225", "country": "Japón", "currency": "JPY", "tz": "Asia/Tokyo", "open": 9, "close": 15, "lat": 35.6828, "lon": 139.7595, "fallback": None},
     "000001.SS": {"name": "Shanghai Comp.", "country": "China", "currency": "CNY", "tz": "Asia/Shanghai", "open": 9, "close": 15, "lat": 31.2304, "lon": 121.4737, "fallback": "MCHI"},
     "^HSI": {"name": "Hang Seng", "country": "Hong Kong", "currency": "HKD", "tz": "Asia/Hong_Kong", "open": 9, "close": 16, "lat": 22.3080, "lon": 114.1716, "fallback": None},
     "^AXJO": {"name": "ASX 200", "country": "Australia", "currency": "AUD", "tz": "Australia/Sydney", "open": 10, "close": 16, "lat": -33.8688, "lon": 151.2093, "fallback": None},
-    # LatAm
     "^BVSP": {"name": "Bovespa", "country": "Brasil", "currency": "BRL", "tz": "America/Sao_Paulo", "open": 10, "close": 17, "lat": -23.5505, "lon": -46.6333, "fallback": None},
     "^MXX": {"name": "IPC México", "country": "México", "currency": "MXN", "tz": "America/Mexico_City", "open": 8, "close": 15, "lat": 19.4326, "lon": -99.1332, "fallback": None},
 }
 
-# ----------------------------
-# Yahoo Chart API helpers
-# ----------------------------
+# ---------------- Yahoo Chart API ----------------
 BASE_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
 
 @st.cache_data(ttl=300)
@@ -101,7 +88,7 @@ def fetch_intraday(sym: str) -> Optional[Dict]:
         return None
     chg = (current - prev) / prev * 100
 
-    # rango simple último mes (para icono ⚡)
+    # rango último mes (para icono ⚡)
     rng_pct = None
     hist = fetch_chart(sym, rng="1mo", interval="1d")
     try:
@@ -130,9 +117,7 @@ def fetch_history(sym: str) -> Optional[pd.Series]:
     closes = [c for c in q.get("close", []) if c is not None]
     return pd.Series(closes) if closes else None
 
-# ----------------------------
-# FX a EUR: EURXXX=X (regla: EUR = Precio_local / (EURXXX=X))
-# ----------------------------
+# ---------------- FX a EUR ----------------
 FX_MAP = {
     "USD": "EURUSD=X",
     "GBP": "EURGBP=X",
@@ -168,9 +153,7 @@ def currency_to_eur_multiplier(code: str) -> Optional[float]:
     except Exception:
         return None
 
-# ----------------------------
-# Estado del mercado por TZ
-# ----------------------------
+# ---------------- Estado del mercado ----------------
 def market_status(tz: str, open_h: int, close_h: int) -> Tuple[bool, str, str]:
     try:
         zone = pytz.timezone(tz)
@@ -182,9 +165,7 @@ def market_status(tz: str, open_h: int, close_h: int) -> Tuple[bool, str, str]:
     except Exception:
         return False, "Error", "N/A"
 
-# ----------------------------
-# Lógica de iconos/emojis
-# ----------------------------
+# ---------------- Emojis / etiquetas cortas ----------------
 def perf_to_emoji(chg: float, intraday_range: Optional[float], vol_threshold: float) -> str:
     if intraday_range is not None and intraday_range > vol_threshold:
         return "⚡"
@@ -198,9 +179,11 @@ def perf_to_emoji(chg: float, intraday_range: Optional[float], vol_threshold: fl
         return "🌧"
     return "☁️"
 
-# ----------------------------
-# Carga de un mercado (intradia + MA50 + estado)
-# ----------------------------
+def short_label(chg_pct: float, emoji: str) -> str:
+    # Solo emoji + variación %
+    return f"{emoji} {chg_pct:+.2f}%"
+
+# ---------------- Cargar mercado ----------------
 def load_market(sym: str) -> Optional[Dict]:
     info = MARKETS[sym]
     data = fetch_intraday(sym)
@@ -238,20 +221,18 @@ def load_market(sym: str) -> Optional[Dict]:
         "updated": data["time"],
     }
 
-# ----------------------------
-# MAPA — Plotly
-# ----------------------------
+# ---------------- Mapa (Plotly) ----------------
 def draw_map_plotly(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
     lats, lons, texts, hover = [], [], [], []
     for r in rows:
-        lat, lon = r["coords"]
         mult = currency_to_eur_multiplier(r["currency"]) if show_eur else None
         eur_val = (r["price"] * mult) if (show_eur and mult) else None
         emoji = perf_to_emoji(r["chg_pct"], r["rng_pct"], vol_threshold)
-        label = f"{emoji} {r['name']} ({r['country']}) {r['chg_pct']:+.2f}%"
+        label = short_label(r["chg_pct"], emoji)
+
         hov = (
-            f"<b>{r['name']}</b> — {r['country']}<br>"
-            f"Estado: {'🟢' if r['is_open'] else '🔴'} {r['status']} • {r['local_time']}<br>"
+            f"<b>{r['name']}</b><br>"
+            f"{r['country']} • {'🟢' if r['is_open'] else '🔴'} {r['status']} • {r['local_time']}<br>"
             f"Último: {r['price']:.2f} {r['currency']}"
         )
         if eur_val:
@@ -259,10 +240,9 @@ def draw_map_plotly(rows: List[Dict], show_eur: bool, vol_threshold: float) -> N
         if r["ma50"] is not None:
             hov += f"<br>MA50: {r['ma50']:.2f} ({'📈' if 'Alcista' in r['trend'] else '📉'})"
         hov += f"<br>Variación: {r['chg_pct']:+.2f}%"
-        lats.append(lat)
-        lons.append(lon)
-        texts.append(label)
-        hover.append(hov)
+
+        lats.append(r["coords"][0]); lons.append(r["coords"][1])
+        texts.append(label); hover.append(hov)
 
     fig = go.Figure(go.Scattergeo(
         lon=lons,
@@ -271,44 +251,57 @@ def draw_map_plotly(rows: List[Dict], show_eur: bool, vol_threshold: float) -> N
         hovertemplate="%{text}<br>%{customdata}<extra></extra>",
         customdata=hover,
         mode="text+markers",
-        marker=dict(size=8),
+        marker=dict(size=10),
+        textfont=dict(size=16, color="black"),  # texto grande, mapa blanco
     ))
+
     fig.update_geos(
-        showcountries=True,
-        showland=True,
-        landcolor="rgb(240,240,240)",
+        projection_type="natural earth",
+        showcoastlines=True, coastlinecolor="#E5E5E5",
+        showland=True, landcolor="#FFFFFF",
+        showcountries=True, countrycolor="#E5E5E5",
+        showocean=True, oceancolor="#FFFFFF",
+        showlakes=True, lakecolor="#FFFFFF",
         lataxis_range=[-60, 75],
     )
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=520)
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        height=640,  # más alto
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-# ----------------------------
-# MAPA — PyDeck (fallback)
-# ----------------------------
+# ---------------- Mapa (PyDeck fallback) ----------------
 def draw_map_pydeck(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
     data = []
     for r in rows:
         emoji = perf_to_emoji(r["chg_pct"], r["rng_pct"], vol_threshold)
-        label = f"{emoji} {r['name']} ({r['country']}) {r['chg_pct']:+.2f}%"
+        label = short_label(r["chg_pct"], emoji)
         data.append({"lat": r["coords"][0], "lon": r["coords"][1], "label": label})
+
     df = pd.DataFrame(data)
 
-    layer = pdk.Layer(
+    text_layer = pdk.Layer(
         "TextLayer",
         df,
         get_position='[lon, lat]',
         get_text="label",
-        get_size=12,
+        get_size=18,                # grande
         get_color=[0, 0, 0, 255],
         get_angle=0,
         pickable=True,
+        billboard=True,
     )
-    view_state = pdk.ViewState(latitude=20, longitude=0, zoom=1.2)
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{label}"}))
+    view_state = pdk.ViewState(latitude=20, longitude=0, zoom=1.3)
+    st.pydeck_chart(pdk.Deck(
+        layers=[text_layer],
+        initial_view_state=view_state,
+        map_style="light",  # claro
+        tooltip={"text": "{label}"},
+    ))
 
-# ----------------------------
-# Tabla única
-# ----------------------------
+# ---------------- Tabla única ----------------
 def build_table(rows: List[Dict], show_eur: bool) -> None:
     data = []
     for r in rows:
@@ -316,14 +309,11 @@ def build_table(rows: List[Dict], show_eur: bool) -> None:
         eur_val = (r["price"] * mult) if (show_eur and mult) else None
         data.append({
             "Mercado": r["name"],
-            "País": r["country"],
-            "Precio": f"{r['price']:.2f} {r['currency']}",
-            "Precio (EUR)": (f"{eur_val:.2f} EUR" if eur_val else "—"),
             "Var %": r["chg_pct"],
+            "Último": f"{r['price']:.2f} {r['currency']}",
             "MA50": round(r["ma50"], 2) if r["ma50"] is not None else None,
-            "Tendencia": r["trend"],
-            "Estado": ("🟢 Abierto" if r["is_open"] else "🔴 Cerrado"),
-            "Hora local": r["local_time"],
+            "Estado": ("🟢" if r["is_open"] else "🔴"),
+            "EUR": (f"{eur_val:.2f}" if eur_val else "—") if show_eur else "—",
         })
     df = pd.DataFrame(data)
     if df.empty:
@@ -332,9 +322,7 @@ def build_table(rows: List[Dict], show_eur: bool) -> None:
         df = df.sort_values("Var %", ascending=False)
         st.dataframe(df, use_container_width=True, hide_index=True)
 
-# ----------------------------
-# KPIs
-# ----------------------------
+# ---------------- KPIs ----------------
 def kpis(rows: List[Dict]) -> None:
     if not rows:
         return
@@ -349,14 +337,11 @@ def kpis(rows: List[Dict]) -> None:
     with c3: st.metric("% medio", f"{avg:+.2f}%")
     with c4: st.metric("Mayor ↑ / ↓", f"{best['name']} {best['chg_pct']:+.2f}% / {worst['name']} {worst['chg_pct']:+.2f}%")
 
-# ----------------------------
-# App principal
-# ----------------------------
+# ---------------- App ----------------
 def main():
     st.title("🌍 Mapa Bursátil Mundial — Widget")
     st.caption("Monitor interactivo de bolsas globales con MA50 real y mapa geográfico")
 
-    # Sidebar
     st.sidebar.header("🎛️ Panel de control")
     if st.sidebar.button("🔄 Actualizar datos", type="primary"):
         st.cache_data.clear()
@@ -367,7 +352,6 @@ def main():
     vol_thresh = st.sidebar.slider("Umbral ⚡ volatilidad (%)", 0.5, 5.0, 1.5, 0.1)
     show_eur = st.sidebar.toggle("Mostrar equivalente en EUR", value=False)
 
-    # Carga y filtrado
     rows: List[Dict] = []
     with st.spinner("Cargando mercados..."):
         for sym, info in MARKETS.items():
@@ -384,7 +368,6 @@ def main():
             if r:
                 rows.append(r)
 
-    # Filtro por rendimiento
     if perf_filter == "> 0%":
         rows = [r for r in rows if r["chg_pct"] > 0]
     elif perf_filter == "< 0%":
@@ -392,7 +375,6 @@ def main():
     elif perf_filter == "Entre -0.5% y +0.5%":
         rows = [r for r in rows if -0.5 <= r["chg_pct"] <= 0.5]
 
-    # Tabs
     tab_map, tab_table, tab_settings, tab_help = st.tabs(["🗺️ Mapa", "📋 Resumen", "⚙️ Ajustes", "❓ Ayuda"])
 
     with tab_map:
@@ -402,33 +384,29 @@ def main():
         else:
             st.warning("Plotly no está disponible en este entorno. Mostrando mapa fallback con PyDeck.")
             draw_map_pydeck(rows, show_eur, vol_thresh)
-        st.markdown("""
-        **Leyenda**  
-        ☀️ sube > +1%    ⛅ plano −0,5% a +0,5%    🌥 baja leve −1% a −0,5%    🌧 baja < −1%    ⚡ alta volatilidad (> umbral)
-        """)
+        st.markdown("**Leyenda**  ☀️ > +1%   ⛅ −0,5% a +0,5%   🌥 −1% a −0,5%   🌧 < −1%   ⚡ volatilidad alta")
 
     with tab_table:
         st.subheader("Tabla única de mercados")
         build_table(rows, show_eur)
 
     with tab_settings:
-        st.write("Ajusta filtros en la barra lateral. El umbral de ⚡ aplica a la etiqueta del mapa. Usa ‘Actualizar datos’ para forzar recarga y limpiar caché.")
+        st.write("Ajusta filtros en la barra lateral. Usa ‘Actualizar datos’ para limpiar caché y recargar.")
         st.code("""
-- Región: filtra los mercados por zona geográfica.
+- Región: filtra por zona geográfica.
 - Rendimiento: filtra por variación intradía.
-- Umbral volatilidad: si el rango % del último mes supera el umbral, el icono será ⚡.
-- EUR: convierte precios a euros con tickers EURXXX=X.
+- Umbral ⚡: si el rango % del último mes supera el umbral, el icono será ⚡.
+- EUR: convierte precios a euros con EURXXX=X.
         """, language="markdown")
 
     with tab_help:
         st.markdown("""
 **Guía rápida**
-- El mapa usa **Plotly scattergeo** si está disponible; si no, **PyDeck** como alternativa.
-- La **MA50** se calcula con históricos reales de Yahoo Chart API (6 meses, 1d).
-- El estado **Abierto/Cerrado** se aproxima por horario local del parqué.
-- Solo hay **una tabla resumen** (esta) para evitar duplicados.
-- Si Yahoo no devuelve datos para un índice, se intenta un **ETF fallback**.
-- Datos únicamente **educativos**; puede haber retrasos.
+- Mapa blanco; etiquetas cortas (emoji + %).
+- MA50 calculada con históricos (6 meses, 1d).
+- Estado abierto/cerrado aproximado por horario local.
+- Si Yahoo falla en un índice, se intenta ETF fallback.
+- Datos educativos, pueden tener retraso.
         """)
 
     st.caption(f"Actualizado: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
