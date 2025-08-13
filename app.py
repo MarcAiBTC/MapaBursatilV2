@@ -1,31 +1,32 @@
 # ================================================================
-# Mapa Bursátil Mundial — Streamlit (Single file)
+# Mapa Bursátil Mundial — Streamlit (definitivo, 1 archivo)
 # ================================================================
-# - Mapa mundial interactivo (Plotly scattergeo, sin Mapbox)
-# - Una sola tabla resumen (en pestaña "Resumen")
+# - Mapa mundial interactivo:
+#     • Plotly scattergeo (si disponible)
+#     • Fallback PyDeck si Plotly no está instalado
+# - Una sola tabla resumen (pestaña "Resumen")
 # - MA50 real por mercado (Yahoo Chart API)
 # - Sidebar con filtros + botón "Actualizar datos"
-# - KPIs en cabecera (mercados en verde/rojo, % medio, best/worst)
+# - KPIs en cabecera (verde/rojo, % medio, best/worst)
 # - Conversión opcional a EUR (tickers EURXXX=X)
 # - Caché con st.cache_data, manejo de errores
 # ================================================================
 
 from __future__ import annotations
-import sys, subprocess
-
-# ---- Plotly (auto-instalación si falta) ----
-try:
-    import plotly.graph_objects as go
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "plotly>=5.10.0"])
-    import plotly.graph_objects as go
-
 import streamlit as st
 import pandas as pd
 import requests
 import pytz
 from datetime import datetime
 from typing import Dict, Optional, Tuple, List
+
+# ---- Plotly si está disponible; si no, fallback a PyDeck ----
+PLOTLY_OK = True
+try:
+    import plotly.graph_objects as go
+except Exception:
+    PLOTLY_OK = False
+    import pydeck as pdk  # PyDeck viene con Streamlit
 
 # ----------------------------
 # Configuración general
@@ -85,7 +86,7 @@ def fetch_chart(sym: str, rng: str = "6mo", interval: str = "1d") -> Optional[di
 @st.cache_data(ttl=300)
 def fetch_intraday(sym: str) -> Optional[Dict]:
     res = fetch_chart(sym, rng="1d", interval="1m")
-    if not res:  # fallback si falla el índice
+    if not res:
         return None
     meta = res.get("meta", {})
     current = meta.get("regularMarketPrice")
@@ -99,9 +100,10 @@ def fetch_intraday(sym: str) -> Optional[Dict]:
     if current is None or prev in (None, 0):
         return None
     chg = (current - prev) / prev * 100
+
     # rango simple último mes (para icono ⚡)
-    hist = fetch_chart(sym, rng="1mo", interval="1d")
     rng_pct = None
+    hist = fetch_chart(sym, rng="1mo", interval="1d")
     try:
         if hist:
             q = hist.get("indicators", {}).get("quote", [{}])[0]
@@ -110,6 +112,7 @@ def fetch_intraday(sym: str) -> Optional[Dict]:
                 rng_pct = (max(closes) - min(closes)) / closes[-1] * 100
     except Exception:
         rng_pct = None
+
     return {
         "price": float(current),
         "prev": float(prev),
@@ -200,8 +203,6 @@ def perf_to_emoji(chg: float, intraday_range: Optional[float], vol_threshold: fl
 # ----------------------------
 def load_market(sym: str) -> Optional[Dict]:
     info = MARKETS[sym]
-
-    # intradía (con fallback si procede)
     data = fetch_intraday(sym)
     used = sym
     if data is None and info.get("fallback"):
@@ -210,7 +211,6 @@ def load_market(sym: str) -> Optional[Dict]:
     if data is None:
         return None
 
-    # MA50 con históricos reales
     hist = fetch_history(used)
     ma50 = None
     if hist is not None and len(hist) >= 50:
@@ -239,9 +239,9 @@ def load_market(sym: str) -> Optional[Dict]:
     }
 
 # ----------------------------
-# Mapa Plotly
+# MAPA — Plotly
 # ----------------------------
-def build_map(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
+def draw_map_plotly(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
     lats, lons, texts, hover = [], [], [], []
     for r in rows:
         lat, lon = r["coords"]
@@ -281,6 +281,30 @@ def build_map(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
     )
     fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=520)
     st.plotly_chart(fig, use_container_width=True)
+
+# ----------------------------
+# MAPA — PyDeck (fallback)
+# ----------------------------
+def draw_map_pydeck(rows: List[Dict], show_eur: bool, vol_threshold: float) -> None:
+    data = []
+    for r in rows:
+        emoji = perf_to_emoji(r["chg_pct"], r["rng_pct"], vol_threshold)
+        label = f"{emoji} {r['name']} ({r['country']}) {r['chg_pct']:+.2f}%"
+        data.append({"lat": r["coords"][0], "lon": r["coords"][1], "label": label})
+    df = pd.DataFrame(data)
+
+    layer = pdk.Layer(
+        "TextLayer",
+        df,
+        get_position='[lon, lat]',
+        get_text="label",
+        get_size=12,
+        get_color=[0, 0, 0, 255],
+        get_angle=0,
+        pickable=True,
+    )
+    view_state = pdk.ViewState(latitude=20, longitude=0, zoom=1.2)
+    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{label}"}))
 
 # ----------------------------
 # Tabla única
@@ -373,7 +397,11 @@ def main():
 
     with tab_map:
         kpis(rows)
-        build_map(rows, show_eur, vol_thresh)
+        if PLOTLY_OK:
+            draw_map_plotly(rows, show_eur, vol_thresh)
+        else:
+            st.warning("Plotly no está disponible en este entorno. Mostrando mapa fallback con PyDeck.")
+            draw_map_pydeck(rows, show_eur, vol_thresh)
         st.markdown("""
         **Leyenda**  
         ☀️ sube > +1%    ⛅ plano −0,5% a +0,5%    🌥 baja leve −1% a −0,5%    🌧 baja < −1%    ⚡ alta volatilidad (> umbral)
@@ -395,7 +423,7 @@ def main():
     with tab_help:
         st.markdown("""
 **Guía rápida**
-- El mapa usa **Plotly scattergeo**, no requiere claves ni Mapbox.
+- El mapa usa **Plotly scattergeo** si está disponible; si no, **PyDeck** como alternativa.
 - La **MA50** se calcula con históricos reales de Yahoo Chart API (6 meses, 1d).
 - El estado **Abierto/Cerrado** se aproxima por horario local del parqué.
 - Solo hay **una tabla resumen** (esta) para evitar duplicados.
